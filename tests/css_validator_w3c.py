@@ -55,22 +55,6 @@ def run_test(langCode, url):
         print('Timeout!\nMessage:\n{0}'.format(sys.exc_info()[0]))
         return None
 
-    if number_of_errors == 0:
-        points = 5.0
-        review = _('TEXT_REVIEW_CSS_VERY_GOOD')
-    elif number_of_errors <= 5:
-        points = 4.0
-        review = _('TEXT_REVIEW_CSS_IS_GOOD').format(number_of_errors)
-    elif number_of_errors <= 10:
-        points = 3.0
-        review = _('TEXT_REVIEW_CSS_IS_OK').format(number_of_errors)
-    elif number_of_errors <= 20:
-        points = 2.0
-        review = _('TEXT_REVIEW_CSS_IS_BAD').format(number_of_errors)
-    elif number_of_errors > 20:
-        points = 1.0
-        review = _('TEXT_REVIEW_CSS_IS_VERY_BAD').format(number_of_errors)
-
     error_message_dict = {}
     error_message_grouped_dict = {}
     if number_of_errors > 0:
@@ -102,4 +86,45 @@ def run_test(langCode, url):
 
                 review += _('TEXT_REVIEW_ERRORS_ITEM').format(item_text, item_value)
 
+    number_of_error_types = len(error_message_grouped_dict)
+
+    result = calculate_rating(number_of_error_types, number_of_errors)
+    points = result[0]
+
+    if number_of_errors > 0:
+        review = _('TEXT_REVIEW_RATING_ITEMS').format(number_of_errors,
+                                                      result[2]) + review
+    if number_of_error_types > 0:
+        review = _('TEXT_REVIEW_RATING_GROUPED').format(
+            number_of_error_types, result[1]) + review
+
+    if points == 5.0:
+        review = _('TEXT_REVIEW_CSS_VERY_GOOD') + review
+    elif points >= 4.0:
+        review = _('TEXT_REVIEW_CSS_IS_GOOD').format(
+            number_of_errors, number_of_error_types) + review
+    elif points >= 3.0:
+        review = _('TEXT_REVIEW_CSS_IS_OK').format(number_of_errors) + review
+    elif points > 1.0:
+        review = _('TEXT_REVIEW_CSS_IS_BAD').format(number_of_errors) + review
+    elif points <= 1.0:
+        review = _('TEXT_REVIEW_CSS_IS_VERY_BAD').format(
+            number_of_errors) + review
+
     return (points, review, error_message_dict)
+
+
+def calculate_rating(number_of_error_types, number_of_errors):
+    rating_number_of_error_types = 5.0 - (number_of_error_types / 5.0)
+    print('number of grouped error type: {0: .2f}'.format(
+        rating_number_of_error_types))
+
+    rating_number_of_errors = ((number_of_errors / 2.0) / 5.0)
+    print('number of errors: {0: .2f}'.format(rating_number_of_errors))
+
+    rating_result = float("{0:.2f}".format(
+        rating_number_of_error_types - rating_number_of_errors))
+    if rating_result < 1.0:
+        rating_result = 1.0
+
+    return (rating_result, rating_number_of_error_types, rating_number_of_errors)
