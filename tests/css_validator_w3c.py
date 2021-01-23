@@ -41,20 +41,24 @@ def run_test(langCode, url):
     print(_('TEXT_RUNNING_TEST'))
 
     errors = list()
+    tmp_css = ''
 
     # 1. Get ROOT PAGE HTML
-    html = get_source(url)
+    #html = get_source(url)
+    html = httpRequestGetContent(url)
     # 2. FIND ALL INLE CSS (AND CALCULTE)
     # 2.1 FINS ALL <STYLE>
-    errors += get_errors_for_style_tags(html, _)
+    tmp_css += get_css_from_style_tags(html)
 
     # 2.2 FIND ALL style=""
-    errors += get_errors_for_style_attributes(html, _)
+    tmp_css += get_css_from_style_attributes(html)
 
     # 2.3 GET ERRORS FROM SERVICE
     # 2.4 CALCULATE SCORE
     # 3 FIND ALL <LINK> (rel=\"stylesheet\")
-    errors += get_errors_for_link_tags(html, url, _)
+    tmp_css += get_css_from_link_tags(html, url)
+
+    errors = get_errors_for_css(tmp_css)
 
     result = create_review_and_rating(errors, _, '')
 
@@ -85,10 +89,8 @@ def run_test(langCode, url):
     return (points, review, error_message_dict)
 
 
-def get_errors_for_link_tags(html, url, _):
+def get_css_from_link_tags(html, url):
     #print('link tag(s)')
-    results = list()
-
     soup = BeautifulSoup(html, 'lxml')
     elements = soup.find_all('link')
 
@@ -97,6 +99,9 @@ def get_errors_for_link_tags(html, url, _):
     parsed_url_scheme = o.scheme
 
     resource_index = 1
+
+    temp_link_css = ''
+
     for element in elements:
         # print(element.contents)
         resource_type = element['rel']
@@ -118,27 +123,23 @@ def get_errors_for_link_tags(html, url, _):
                 # relative url, but without starting /
                 resource_url = parsed_url + '/' + resource_url
 
-            # print('resource_url', resource_url)
-            # print('stylesheet resource #{0}:'.format(resource_index))
-            # review_header = '* <link rel="stylesheet" #{0}>:\n'.format(
-            #    resource_index)
-            # 3.1 GET ERRORS FROM SERVICE (FOR EVERY <LINK>) AND CALCULATE SCORE
-            results += get_errors_for_url(
-                resource_url)
-            # results.append(result_link_css)
+            print('resource_url:', resource_url)
+            link_css = ''
+            #link_css += get_source(resource_url)
+            link_css = httpRequestGetContent(resource_url)
+            temp_link_css += '\n{0}\n'.format(link_css)
+
             resource_index += 1
-            time.sleep(10)
 
-    return results
+    return temp_link_css
 
 
-def get_errors_for_style_attributes(html, _):
+def get_css_from_style_attributes(html):
     #print('style attribute(s)')
 
     soup = BeautifulSoup(html, 'lxml')
     elements = soup.find_all(attrs={"style": True})
 
-    results = list()
     temp_attribute_css = ''
 
     for element in elements:
@@ -146,34 +147,21 @@ def get_errors_for_style_attributes(html, _):
         temp_attribute_css += '' + "{0}{{{1}}}".format(
             element.name, element['style'])
 
-    if temp_attribute_css != '':
-        results = get_errors_for_css(temp_attribute_css)
-        temp_attribute_css = ''
-        time.sleep(10)
-
-    return results
+    return temp_attribute_css
 
 
-def get_errors_for_style_tags(html, _):
+def get_css_from_style_tags(html):
     #print('style tag(s)')
 
     soup = BeautifulSoup(html, 'lxml')
     elements = soup.find_all('style')
 
-    results = list()
     temp_inline_css = ''
     for element in elements:
         # print(element.contents)
         temp_inline_css += '' + element.text
 
-    if temp_inline_css != '':
-        # print('style-tag(s):')
-        #review_header = '* <style>:\n'
-        results = get_errors_for_css(temp_inline_css)
-        # results.append(result_inline_css)
-        temp_inline_css = ''
-        time.sleep(10)
-    return results
+    return temp_inline_css
 
 
 def calculate_rating(number_of_error_types, number_of_errors):
@@ -216,30 +204,35 @@ def get_errors_for_url(url):
 def get_errors_for_css(data):
     try:
         data = data.strip()
-
+        #data = '.u-expandable__checkbox~.u-expandable__container{display:none}.u-expandable__checkbox:checked~.u-expandable__container{display:block}'
         # print('data:', data)
 
         service_url = 'https://validator.w3.org/nu/'
+        # headers = {'user-agent': useragent,
+        #           'Content-Type': 'text/css; charset=utf-8'}
         headers = {'user-agent': useragent,
-                   'Content-Type': 'text/css; charset=utf-8'}
-        params = {'showsource': 'yes', 'css': 'yes',
+                   'Content-Type': 'text/css'}
+        params = {'showsource': 'false', 'css': 'yes',
                   'out': 'json', 'level': 'error'}
         request = requests.post(service_url, allow_redirects=True,
                                 headers=headers,
                                 params=params,
-                                timeout=request_timeout,
-                                data=data.encode('utf-8')
+                                timeout=request_timeout * 2,
+                                data=data  # .encode('utf-8')
                                 )
 
         # get JSON
         response = json.loads(request.text)
         errors = response['messages']
 
+        time.sleep(10)
+
         #print('errors css:', errors)
 
         return errors
         # print(len(errors))
     except requests.Timeout:
+        time.sleep(10)
         print('Timeout!\nMessage:\n{0}'.format(sys.exc_info()[0]))
         return None
 
